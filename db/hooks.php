@@ -15,16 +15,18 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Version details.
+ * Hook callbacks for tool_imageoptimize.
  *
  * @package   tool_imageoptimize
- * @copyright 2020 Igor Sazonov <sovletig@gmail.com>
+ * @copyright 2026 eduvidual
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version   = 2023040400.01; // The current plugin version (Date: YYYYMMDDXX).
-$plugin->requires  = 2024100100; // Requires this Moodle version (4.5+ for hook system).
-$plugin->release   = '1.0.3 eduvidual (Build: 2023040400.01)';
-$plugin->component = 'tool_imageoptimize'; // Full name of the plugin (used for diagnostics).
+$callbacks = [
+    [
+        'hook' => \core_files\hook\after_file_created::class,
+        'callback' => [\tool_imageoptimize\hook_callbacks::class, 'after_file_created'],
+    ],
+];
