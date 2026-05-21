@@ -312,7 +312,6 @@ class tool_image_optimize_helper extends \tool_image_optimize {
             // Throw error to revert db changes.
             // throw new coding_exception('pathnamehashchanged');
 
-            //throw new coding_exception('pathnamehashchanged');
             $DB->set_field('files', 'pathnamehash', $file->pathnamehash, [ 'id' => $file->id ]);
         }
 
@@ -420,6 +419,7 @@ class tool_image_optimize_helper extends \tool_image_optimize {
     protected function update_fileinfo($fileold, $filenew) : void {
         global $DB;
 
+        // only read id column
         $relatedreferences = $DB->get_records_select('files', 'contenthash = :contenthash',
                 ['contenthash' => $fileold->contenthash], '', 'id');
 
