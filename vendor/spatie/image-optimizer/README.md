@@ -4,7 +4,7 @@
 ![Tests](https://github.com/spatie/image-optimizer/workflows/Tests/badge.svg)
 [![Total Downloads](https://img.shields.io/packagist/dt/spatie/image-optimizer.svg?style=flat-square)](https://packagist.org/packages/spatie/image-optimizer)
 
-This package can optimize PNGs, JPGs, SVGs and GIFs by running them through a chain of various [image optimization tools](#optimization-tools). Here's how you can use it:
+This package can optimize PNGs, JPGs, WEBPs, AVIFs, SVGs and GIFs by running them through a chain of various [image optimization tools](#optimization-tools). Here's how you can use it:
 
 ```php
 use Spatie\ImageOptimizer\OptimizerChainFactory;
@@ -21,6 +21,8 @@ Here are some [example conversions](#example-conversions) that have been done by
 Loving Laravel? Then head over to [the Laravel specific integration](https://github.com/spatie/laravel-image-optimizer).
 
 Using WordPress? Then try out [the WP CLI command](https://github.com/TypistTech/image-optimize-command).
+
+SilverStripe enthusiast? Don't waste time, go to [the SilverStripe module](https://github.com/axllent/silverstripe-image-optimiser).
 
 ## Support us
 
@@ -42,22 +44,24 @@ composer require spatie/image-optimizer
 
 The package will use these optimizers if they are present on your system:
 
-- [JpegOptim](http://freecode.com/projects/jpegoptim)
+- [JpegOptim](https://github.com/tjko/jpegoptim)
 - [Optipng](http://optipng.sourceforge.net/)
 - [Pngquant 2](https://pngquant.org/)
 - [SVGO 1](https://github.com/svg/svgo)
 - [Gifsicle](http://www.lcdf.org/gifsicle/)
 - [cwebp](https://developers.google.com/speed/webp/docs/precompiled)
+- [avifenc](https://github.com/AOMediaCodec/libavif/blob/main/doc/avifenc.1.md)
 
-Here's how to install all the optimizers on Ubuntu:
+Here's how to install all the optimizers on Ubuntu/Debian:
 
 ```bash
 sudo apt-get install jpegoptim
 sudo apt-get install optipng
 sudo apt-get install pngquant
-sudo npm install -g svgo@1.3.2
+sudo npm install -g svgo
 sudo apt-get install gifsicle
 sudo apt-get install webp
+sudo apt-get install libavif-bin # minimum 0.9.3
 ```
 
 And here's how to install the binaries on MacOS (using [Homebrew](https://brew.sh/)):
@@ -66,10 +70,12 @@ And here's how to install the binaries on MacOS (using [Homebrew](https://brew.s
 brew install jpegoptim
 brew install optipng
 brew install pngquant
-npm install -g svgo@1.3.2
+npm install -g svgo
 brew install gifsicle
 brew install webp
+brew install libavif
 ```
+
 And here's how to install the binaries on Fedora/RHEL/CentOS:
 
 ```bash
@@ -77,9 +83,10 @@ sudo dnf install epel-release
 sudo dnf install jpegoptim
 sudo dnf install optipng
 sudo dnf install pngquant
-sudo npm install -g svgo@1.3.2
+sudo npm install -g svgo
 sudo dnf install gifsicle
 sudo dnf install libwebp-tools
+sudo dnf install libavif-tools
 ```
 
 ## Which tools will do what?
@@ -101,11 +108,9 @@ PNGs will be made smaller by running them through two tools. The first one is [P
 
 ### SVGs
 
-SVGs will be minified by [SVGO 1](https://github.com/svg/svgo). SVGO's default configuration will be used, with the omission of the `cleanupIDs` plugin because that one is known to cause troubles when displaying multiple optimized SVGs on one page.
+SVGs will be minified by [SVGO](https://github.com/svg/svgo). SVGO's default configuration will be used, with the omission of the `cleanupIDs` and `removeViewBox` plugins because these are known to cause troubles when displaying multiple optimized SVGs on one page.
 
 Please be aware that SVGO can break your svg. You'll find more info on that in this [excellent blogpost](https://www.sarasoueidan.com/blog/svgo-tools/) by [Sara Soueidan](https://twitter.com/SaraSoueidan).
-
-For now, the default configuration used for SVGO is only compatible with SVGO 1.x. To use options compatible with SVGO 2.x, you need to [create your own optimization chain](#creating-your-own-optimization-chains).
 
 ### GIFs
 
@@ -121,6 +126,20 @@ WEBPs will be optimized by [Cwebp](https://developers.google.com/speed/webp/docs
 - `-q 90` Quality factor that brings the least noticeable changes.
 
 (Settings are original taken from [here](https://medium.com/@vinhlh/how-i-apply-webp-for-optimizing-images-9b11068db349))
+
+### AVIFs
+
+AVIFs will be optimized by [avifenc](https://github.com/AOMediaCodec/libavif/blob/main/doc/avifenc.1.md). These options will be used:
+- `-a cq-level=23`: Constant Quality level. Lower values mean better quality and greater file size (0-63).
+- `-j all`: Number of jobs (worker threads, `all` uses all available cores).
+- `--min 0`: Min quantizer for color (0-63).
+- `--max 63`: Max quantizer for color (0-63).
+- `--minalpha 0`: Min quantizer for alpha (0-63).
+- `--maxalpha 63`: Max quantizer for alpha (0-63).
+- `-a end-usage=q` Rate control mode set to Constant Quality mode.
+- `-a tune=ssim`: SSIM as tune the encoder for distortion metric.
+
+(Settings are original taken from [here](https://web.dev/compress-images-avif/#create-an-avif-image-with-default-settings) and [here](https://github.com/feat-agency/avif))
 
 ## Usage
 
@@ -160,6 +179,43 @@ $optimizerChain
 ```
 
 In this example each optimizer in the chain will get a maximum 10 seconds to do it's job.
+
+### Handling errors
+
+By default, when an optimizer fails (for example its binary exits with a non-zero status), the failure is logged and the chain simply continues with the next optimizer. If you'd rather be notified, or abort the whole chain, use `throws`.
+
+Call `throws()` to make the chain rethrow the failure and stop:
+
+```php
+$optimizerChain
+    ->throws()
+    ->optimize($pathToImage);
+```
+
+Pass `false` to keep the default "log and continue" behaviour explicitly:
+
+```php
+$optimizerChain
+    ->throws(false)
+    ->optimize($pathToImage);
+```
+
+Or pass a callable to decide for yourself. The handler receives the exception, the optimizer that failed and the image being optimized. Return to continue with the next optimizer, or throw to abort the chain:
+
+```php
+use Spatie\ImageOptimizer\Image;
+use Spatie\ImageOptimizer\Optimizer;
+
+$optimizerChain
+    ->throws(function (Throwable $exception, Optimizer $optimizer, Image $image) {
+        report($exception);
+
+        // return to continue the chain, or throw to abort it
+    })
+    ->optimize($pathToImage);
+```
+
+Any exception raised while applying an optimizer, most notably a `ProcessTimedOutException` when an optimizer exceeds its [timeout](#setting-a-timeout), flows through this same mechanism. With the default (or `throws(false)`) it is caught and the chain continues; with `throws()` or a callable you get to inspect and decide what to do with it.
 
 ### Creating your own optimization chains
 
@@ -253,6 +309,35 @@ $optimizerChain
    ->optimize($pathToImage);
 ```
 
+### Writing an optimizer without a binary
+
+Sometimes an optimizer has no binary and no shell command to run, for example one that sends the image to an external optimization API. For these cases implement `Spatie\ImageOptimizer\SelfHandlingOptimizer` instead. The chain delegates execution to your `handle` method rather than building and running a process.
+
+The easiest way is to extend `Spatie\ImageOptimizer\Optimizers\BaseSelfHandlingOptimizer`, which leaves you to implement only `canHandle` and `handle`:
+
+```php
+use Psr\Log\LoggerInterface;
+use Spatie\ImageOptimizer\Image;
+use Spatie\ImageOptimizer\Optimizers\BaseSelfHandlingOptimizer;
+
+class ApiOptimizer extends BaseSelfHandlingOptimizer
+{
+    public function canHandle(Image $image): bool
+    {
+        return $image->mime() === 'image/jpeg';
+    }
+
+    public function handle(Image $image, LoggerInterface $logger): void
+    {
+        // Optimize $image->path() however you like, e.g. by calling an API,
+        // and write the optimized bytes back to that path. Throw on failure.
+        // The chain's logger is passed in so you can log your progress.
+    }
+}
+```
+
+Add it to a chain with `addOptimizer()` just like any other optimizer. Failures are governed by [`throws`](#handling-errors) in exactly the same way as binary optimizers: by default the failure is logged and the chain continues, while `throws()` (or a callable) lets you abort or handle it.
+
 ## Logging the optimization process
 
 By default the package will not throw any errors and just operate silently. To verify what the package is doing you can set a logger:
@@ -273,57 +358,73 @@ A logger is a class that implements `Psr\Log\LoggerInterface`. A good logging li
 
 Here are some real life example conversions done by this package.
 
+Methodology for JPG, WEBP, AVIF images: the [original image](https://unsplash.com/photos/jTeQavJjBDs) has been fed to [spatie/image](https://github.com/spatie/image) (using the default GD driver) and resized to 2048px width:
+
+```php
+Spatie\Image\Image::load('original.jpg')
+    ->width(2048)
+    ->save('image.jpg'); // image.png, image.webp, image.avif
+```
+
+### jpg
+
+![Original](https://spatie.github.io/image-optimizer/examples/image.jpg)
+Original<br>
+771 KB
+
+![Optimized](https://spatie.github.io/image-optimizer/examples/image-optimized.jpg)
+Optimized<br>
+511 KB (-33.7%, DSSIM: 0.00052061)
+
+credits: Jeff Sheldon, via [Unsplash](https://unsplash.com)
+
+### webp
+
+![Original](https://spatie.github.io/image-optimizer/examples/image.webp)
+Original<br>
+461 KB
+
+![Optimized](https://spatie.github.io/image-optimizer/examples/image-optimized.webp)
+Optimized<br>
+184 KB (-60.0%, DSSIM: 0.00166036)
+
+credits: Jeff Sheldon, via [Unsplash](https://unsplash.com)
+
+### avif
+
+![Original](https://spatie.github.io/image-optimizer/examples/image.avif)
+Original<br>
+725 KB
+
+![Optimized](https://spatie.github.io/image-optimizer/examples/image-optimized.avif)
+Optimized<br>
+194 KB (-73.2%, DSSIM: 0.00163751)
+
+credits: Jeff Sheldon, via [Unsplash](https://unsplash.com)
+
 ### png
 
 Original: Photoshop 'Save for web' | PNG-24 with transparency<br>
-40 KB
+39 KB
 
 ![Original](https://spatie.github.io/image-optimizer/examples/logo.png)
 
 Optimized<br>
-16 KB (40%)
+16 KB (-59%, DSSIM: 0.00000251)
 
 ![Optimized](https://spatie.github.io/image-optimizer/examples/logo-optimized.png)
-
-### jpg
-
-Original: Photoshop 'Save for web' | quality 60, optimized<br>
-547 KB
-
-![Original](https://spatie.github.io/image-optimizer/examples/image.jpg)
-
-Optimized<br>
-525 KB (95%)
-
-![Optimized](https://spatie.github.io/image-optimizer/examples/image-optimized.jpg)
-
-credits: Jeff Sheldon, via [Unsplash](https://unsplash.com)
 
 ### svg
 
 Original: Illustrator | Web optimized SVG export<br>
-26 KB
+25 KB
 
 ![Original](https://spatie.github.io/image-optimizer/examples/graph.svg)
 
 Optimized<br>
-20 KB (76%)
+20 KB (-21.5%)
 
 ![Optimized](https://spatie.github.io/image-optimizer/examples/graph-optimized.svg)
-
-### webp
-
-Original: WebPonize<br>
-528 KB
-
-![Original](https://spatie.github.io/image-optimizer/examples/image.webp)
-
-Optimized<br>
-328 KB (89%)
-
-![Optimized](https://spatie.github.io/image-optimizer/examples/image-optimized.webp)
-
-credits: Jeff Sheldon, via [Unsplash](https://unsplash.com)
 
 ## Changelog
 
@@ -337,11 +438,11 @@ composer test
 
 ## Contributing
 
-Please see [CONTRIBUTING](.github/CONTRIBUTING.md) for details.
+Please see [CONTRIBUTING](https://github.com/spatie/.github/blob/main/CONTRIBUTING.md) for details.
 
 ## Security
 
-If you discover any security related issues, please email freek@spatie.be instead of using the issue tracker.
+If you've found a bug regarding security please mail [security@spatie.be](mailto:security@spatie.be) instead of using the issue tracker.
 
 ## Postcardware
 
